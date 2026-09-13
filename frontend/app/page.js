@@ -12,6 +12,7 @@ import {
   fetchStats,
   fetchAuthorities,
   updatePotholeStatus,
+  API_BASE,
 } from "../lib/api";
 
 export default function DashboardPage() {
@@ -97,7 +98,7 @@ export default function DashboardPage() {
   const handleAutoReportCritical = async () => {
     try {
       setReportingLoading(true);
-      const res = await fetch("http://localhost:8000/api/v1/potholes/auto-report-critical", {
+      const res = await fetch(`${API_BASE}/potholes/auto-report-critical`, {
         method: "POST",
       });
       const data = await res.json();

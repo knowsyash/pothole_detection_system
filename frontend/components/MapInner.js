@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import Link from "next/link";
+import { BACKEND_URL } from "../lib/api";
 
 // Custom SVG Pin Generator for Leaflet
 function createPotholeIcon(severity = "LOW", isSelected = false) {
@@ -110,7 +111,7 @@ export default function MapInner({ potholes = [], selectedPothole, onSelectPotho
           const imageUrl = rawImg
             ? (rawImg.startsWith("http://") || rawImg.startsWith("https://") || rawImg.startsWith("data:")
               ? rawImg
-              : `http://localhost:8000${rawImg.startsWith('/') ? '' : '/'}${rawImg}`)
+              : `${BACKEND_URL}${rawImg.startsWith('/') ? '' : '/'}${rawImg}`)
             : null;
 
           return (

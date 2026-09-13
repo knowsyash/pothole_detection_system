@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { detectAndStore } from "../lib/api";
+import { detectAndStore, API_BASE } from "../lib/api";
 
 const inputStyle = {
   width: "100%",
@@ -148,7 +148,7 @@ export default function IngestModal({ isOpen, onClose, onSuccess }) {
     try {
       const potholeId = result.records[0].id;
       const resp = await fetch(
-        `http://localhost:8000/api/v1/potholes/${potholeId}/report`,
+        `${API_BASE}/potholes/${potholeId}/report`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Header from "../../../components/Header";
 import WorkflowStepper from "../../../components/WorkflowStepper";
 import StatusTimeline from "../../../components/StatusTimeline";
-import { fetchPotholeById, updatePotholeStatus, reportPothole, fetchPotholeHistory } from "../../../lib/api";
+import { fetchPotholeById, updatePotholeStatus, reportPothole, fetchPotholeHistory, BACKEND_URL } from "../../../lib/api";
 
 export default function PotholeDetailsPage({ params: paramsPromise }) {
   const params = use(paramsPromise);
@@ -123,7 +123,7 @@ export default function PotholeDetailsPage({ params: paramsPromise }) {
   const displayImage = rawDisplay
     ? (rawDisplay.startsWith("http://") || rawDisplay.startsWith("https://") || rawDisplay.startsWith("data:")
       ? rawDisplay
-      : `http://localhost:8000${rawDisplay.startsWith('/') ? '' : '/'}${rawDisplay}`)
+      : `${BACKEND_URL}${rawDisplay.startsWith('/') ? '' : '/'}${rawDisplay}`)
     : null;
 
   const severityBadgeClass =

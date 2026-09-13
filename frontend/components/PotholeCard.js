@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { BACKEND_URL } from "../lib/api";
 
 export default function PotholeCard({ pothole, onStatusUpdate, isSelected, onSelect }) {
   const [updating, setUpdating] = useState(false);
@@ -32,7 +33,7 @@ export default function PotholeCard({ pothole, onStatusUpdate, isSelected, onSel
   const evidenceUrl = rawEvidence
     ? (rawEvidence.startsWith("http://") || rawEvidence.startsWith("https://") || rawEvidence.startsWith("data:")
       ? rawEvidence
-      : `http://localhost:8000${rawEvidence.startsWith('/') ? '' : '/'}${rawEvidence}`)
+      : `${BACKEND_URL}${rawEvidence.startsWith('/') ? '' : '/'}${rawEvidence}`)
     : null;
 
   const [imgError, setImgError] = useState(false);
