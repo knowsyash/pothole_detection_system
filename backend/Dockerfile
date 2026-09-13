@@ -26,12 +26,13 @@ COPY --chown=user:user requirements.txt ./root-requirements.txt
 COPY --chown=user:user backend/requirements.txt ./backend-requirements.txt
 
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r ./root-requirements.txt && \
     pip install --no-cache-dir -r ./backend-requirements.txt
 
 COPY --chown=user:user okdriver/ ./okdriver/
 COPY --chown=user:user pyproject.toml ./pyproject.toml
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir --no-deps -e .
 
 COPY --chown=user:user backend/ ./backend/
 

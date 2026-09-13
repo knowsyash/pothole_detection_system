@@ -31,13 +31,14 @@ COPY --chown=user:user backend/requirements.txt ./backend-requirements.txt
 
 # Install Python dependencies as root, then switch to user
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r ./root-requirements.txt && \
     pip install --no-cache-dir -r ./backend-requirements.txt
 
 # Copy okdriver core computer vision package and install in editable mode
 COPY --chown=user:user okdriver/ ./okdriver/
 COPY --chown=user:user pyproject.toml ./pyproject.toml
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir --no-deps -e .
 
 # Copy backend source code
 COPY --chown=user:user backend/ ./backend/
