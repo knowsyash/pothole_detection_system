@@ -1,0 +1,11 @@
+# Backend .gitignore
+.env
+.env.*
+*.db
+*.sqlite
+*.sqlite3
+okdriver_dev.db
+__pycache__/
+*.pyc
+uploads/
+.pytest_cache/
