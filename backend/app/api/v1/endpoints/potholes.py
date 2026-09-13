@@ -1,13 +1,13 @@
-"""Pothole ingestion and CRUD API endpoints."""
-
+import asyncio
+import gc
 import json
 import logging
 import os
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from typing import Optional, List, Any
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -45,6 +45,24 @@ def _parse_timestamp(ts_str: str) -> datetime:
             return datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
         except Exception:
             return datetime.now(timezone.utc)
+
+
+_fallback_detector: Optional[Any] = None
+
+
+def _get_detector(request: Request, conf_threshold: Optional[float] = None) -> Any:
+    """Retrieve pre-warmed PotholeDetector singleton from app state, or initialize fallback."""
+    global _fallback_detector
+    detector = getattr(request.app.state, "detector", None) if hasattr(request, "app") else None
+    if detector is None:
+        if _fallback_detector is None:
+            from okdriver import PotholeDetector
+            _fallback_detector = PotholeDetector(conf_threshold=conf_threshold or 0.25, auto_download=True)
+        detector = _fallback_detector
+
+    if conf_threshold is not None:
+        detector.conf_threshold = conf_threshold
+    return detector
 
 
 # ============================================================================
@@ -152,6 +170,7 @@ async def ingest_with_evidence_upload(
     description="Runs okdriver YOLO model on an uploaded image or dashcam video (MP4, MOV, AVI, WEBM), extracts and annotates frames, and writes all detections into the database.",
 )
 async def detect_and_store(
+    request: Request,
     image: Optional[UploadFile] = File(None, description="Input road image file (JPG/PNG)"),
     file: Optional[UploadFile] = File(None, description="Input road image or dashcam video file (JPG/PNG/MP4/MOV/AVI/WEBM)"),
     latitude: float = Form(..., ge=-90.0, le=90.0, description="Vehicle Latitude"),
@@ -164,7 +183,7 @@ async def detect_and_store(
 ):
     """Run detection pipeline on uploaded image or video footage and automatically record findings."""
     try:
-        from okdriver import PotholeDetector, GPSCoordinate, annotate_frame
+        from okdriver import GPSCoordinate, annotate_frame
         import cv2
         import numpy as np
     except ImportError as e:
@@ -193,7 +212,9 @@ async def detect_and_store(
     )
 
     threshold = conf_threshold if conf_threshold is not None else 0.25
-    detector = PotholeDetector(conf_threshold=threshold)
+    detector = _get_detector(request, conf_threshold=threshold)
+    is_cpu = getattr(detector, "device", "cpu") == "cpu"
+
     authority = resolve_authority(gps.latitude, gps.longitude)
     records_to_create = []
     primary_frame_id = None
@@ -213,8 +234,10 @@ async def detect_and_store(
 
             fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-            sample_interval = max(1, int(fps * 0.75))  # Sample every ~0.75 seconds of footage
-            max_samples = 30
+            # Adaptive video sampling: on CPU (Render free tier), sample every ~1.5s (max 10 frames) to stay within 100s timeout.
+            # On GPU, sample every ~0.75s (max 25 frames).
+            sample_interval = max(1, int(fps * (1.5 if is_cpu else 0.75)))
+            max_samples = 10 if is_cpu else 25
 
             frame_idx = 0
             sampled_count = 0
@@ -226,10 +249,10 @@ async def detect_and_store(
 
                 if frame_idx % sample_interval == 0:
                     sampled_count += 1
-                    # Slightly extrapolate GPS or timestamp per video frame
                     sec_offset = frame_idx / fps
                     frame_ts = datetime.now(timezone.utc)
-                    result = detector.detect(frame, gps=gps, is_bgr=True)
+                    # Run inference on threadpool so FastAPI event loop stays responsive
+                    result = await asyncio.to_thread(detector.detect, frame, gps=gps, is_bgr=True)
 
                     if result.detections:
                         if not primary_frame_id:
@@ -285,7 +308,8 @@ async def detect_and_store(
         if frame is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to decode image.")
 
-        result = detector.detect(frame, gps=gps, is_bgr=True)
+        # Run inference on threadpool so FastAPI event loop stays responsive
+        result = await asyncio.to_thread(detector.detect, frame, gps=gps, is_bgr=True)
         primary_frame_id = result.frame_id
 
         # Save original raw image
@@ -322,6 +346,9 @@ async def detect_and_store(
             records_to_create.append(rec_dict)
 
     created_records = crud_pothole.create_potholes_bulk(db, records_to_create)
+
+    # Force Python GC to reclaim temporary frame buffers immediately (critical for Render 512MB limit)
+    gc.collect()
 
     item_desc = "video frames" if is_video else "image"
     return Phase1IngestResponse(
@@ -467,6 +494,10 @@ def auto_report_critical(
         pothole.report_status = dispatch_log.get("status", ReportStatus.REPORTED.value)
         pothole.assigned_authority = auth.name
         pothole.authority_code = auth.code
+        if report_data["evidence"].get("annotated_evidence_url"):
+            pothole.annotated_evidence_url = report_data["evidence"]["annotated_evidence_url"]
+        if report_data["evidence"].get("image_evidence_url"):
+            pothole.image_evidence_url = report_data["evidence"]["image_evidence_url"]
         db.add(pothole)
 
         reports.append(PotholeReportResponse.model_validate(rep_record))
@@ -537,9 +568,13 @@ def report_pothole_to_authority(
         }
     )
 
-    # Update pothole record status and ticket ID
+    # Update pothole record status, ticket ID, and Cloudflare R2 evidence URLs
     pothole.ticket_id = report_data["ticket_id"]
     pothole.report_status = dispatch_log.get("status", ReportStatus.REPORTED.value)
+    if report_data["evidence"].get("annotated_evidence_url"):
+        pothole.annotated_evidence_url = report_data["evidence"]["annotated_evidence_url"]
+    if report_data["evidence"].get("image_evidence_url"):
+        pothole.image_evidence_url = report_data["evidence"]["image_evidence_url"]
     db.add(pothole)
     db.commit()
     db.refresh(pothole)

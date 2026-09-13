@@ -24,8 +24,26 @@ async def lifespan(app: FastAPI):
     """Application startup and shutdown lifespan events."""
     logger.info("Starting up okDRIVER Pothole Management API...")
     init_db()
+
+    # Pre-load PotholeDetector singleton and warm up to prevent first-request lag
+    try:
+        from okdriver import PotholeDetector
+        import numpy as np
+
+        logger.info("Pre-loading PotholeDetector singleton in memory...")
+        detector = PotholeDetector(auto_download=True)
+        # Model warmup with a dummy array to initialize PyTorch/CUDA execution graphs
+        dummy_frame = np.zeros((480, 480, 3), dtype=np.uint8)
+        detector.detect(dummy_frame, auto_extract_gps=False)
+        app.state.detector = detector
+        logger.info(f"PotholeDetector initialized and warmed up on {detector.device.upper()}.")
+    except Exception as exc:
+        logger.warning(f"Could not pre-load PotholeDetector during startup: {exc}")
+        app.state.detector = None
+
     yield
     logger.info("Shutting down okDRIVER Pothole Management API...")
+
 
 
 app = FastAPI(

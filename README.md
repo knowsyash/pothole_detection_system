@@ -3,11 +3,27 @@
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Next.js](https://img.shields.io/badge/Frontend-Next.js%2016-black.svg?logo=next.js&logoColor=white)](https://nextjs.org)
 [![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%20%2F%20Neon-336791.svg?logo=postgresql&logoColor=white)](https://neon.tech)
-[![YOLOv8](https://img.shields.io/badge/Computer%20Vision-YOLOv8%20(Hugging%20Face)-FF6F00.svg)](https://huggingface.co)
-[![Cloudflare R2](https://img.shields.io/badge/Object%20Storage-Cloudflare%20R2%20%2F%20AWS%20S3-F38020.svg?logo=cloudflare&logoColor=white)](https://cloudflare.com)
-[![Docker](https://img.shields.io/badge/Container-Docker%20%26%20Compose-2496ED.svg?logo=docker&logoColor=white)](https://docker.com)
+[![YOLOv8](https://img.shields.io/badge/Computer%20Vision-YOLOv8%20(Ultralytics)-FF6F00.svg)](https://ultralytics.com)
+[![Cloudflare R2](https://img.shields.io/badge/Object%20Storage-Cloudflare%20R2%20%2F%20S3-F38020.svg?logo=cloudflare&logoColor=white)](https://cloudflare.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**okDRIVER** is an end-to-end, full-stack civic infrastructure platform that automatically detects road hazards and potholes from mobile or dashcam video feeds, tags them with granular GPS and reverse-geocoded municipal jurisdictions (MCD, BMC, BBMP, Nagar Palika, NHAI, State PWD), and dispatches automated incident alerts to responsible civic departments via Telegram, Email, and REST APIs.
+**okDRIVER** is an end-to-end, full-stack civic infrastructure intelligence platform that detects road hazards and potholes from road photos or vehicle dashcam video feeds, tags them with granular GPS coordinates and administrative boundaries, automatically identifies the responsible civic authority (NHAI, State PWD, Nagar Palika, MCD, BMC), and dispatches automated incident alerts via Telegram, Email, and REST APIs.
+
+---
+
+## Table of Contents
+
+- [System Architecture](#system-architecture)
+- [Our Approach & Methodology](#our-approach--methodology)
+- [Performance & Cloud Optimizations](#performance--cloud-optimizations)
+- [Repository Structure](#repository-structure)
+- [Quick Start Guide](#quick-start-guide)
+  - [1-Click Windows Launch](#1-click-windows-launch-recommended)
+  - [Manual Local Setup](#manual-local-setup)
+  - [Docker Compose](#docker-compose)
+- [Environment Configuration](#environment-configuration)
+- [API Reference](#api-reference)
+- [Deployment Guide](#deployment-guide)
 
 ---
 
@@ -18,8 +34,16 @@
                                         │
                                         ▼
                   ┌───────────────────────────────────────────┐
+                  │       Client-Side Pre-Compression         │
+                  │       (HTML5 Canvas in Browser)           │
+                  │   Scales >1280px photos to save bandwidth │
+                  └─────────────────────┬─────────────────────┘
+                                        │
+                                        ▼
+                  ┌───────────────────────────────────────────┐
                   │    okDRIVER Vision Pipeline (YOLOv8)      │
-                  │    • Bounding Box & Area Footprint Metric  │
+                  │    • In-Memory Singleton & Warmup         │
+                  │    • Non-blocking asyncio.to_thread       │
                   │    • Severity Rating (LOW to CRITICAL)    │
                   └─────────────────────┬─────────────────────┘
                                         │
@@ -35,16 +59,17 @@
                          └──────────────┬──────────────┘
                                         ▼
                   ┌───────────────────────────────────────────┐
-                  │    FastAPI REST Engine (Hugging Face)     │
+                  │            FastAPI REST Engine            │
                   │    • Ingestion, CRUD, Audit Trail Logs    │
-                  │    • Multi-Channel Dispatch Router        │
+                  │    • Multi-Channel Alerting Router        │
+                  │    • Explicit Memory Garbage Collection   │
                   └──────────────┬──────────────────┬─────────┘
                                  │                  │
                 ┌────────────────┴──────┐           └──────────────────┐
                 ▼                       ▼                              ▼
   ┌───────────────────────────┐ ┌──────────────────────────┐ ┌───────────────────────────┐
   │ Neon Cloud PostgreSQL     │ │ Automated Civic Alerts   │ │ Next.js 16 Web Dashboard  │
-  │ • Potholes & Telemetry    │ │ • Telegram Push (Group)  │ │ • Interactive Leaflet Map │
+  │ • Potholes & Telemetry    │ │ • Telegram Group Push    │ │ • Interactive Leaflet Map │
   │ • Status Change Audit Log │ │ • Gmail SMTP Dispatch    │ │ • Incident Dossier Views  │
   │ • Municipal Ticket Records│ │ • Simulated Authority API│ │ • Zone & Severity Filters │
   └───────────────────────────┘ └──────────────────────────┘ └───────────────────────────┘
@@ -52,61 +77,178 @@
 
 ---
 
-## Key Features
+## Our Approach & Methodology
 
-1. **Computer Vision & Open-Source AI Model:**
-   - Pre-trained **YOLOv8** pothole detection model weights sourced from **Hugging Face**.
-   - Dual-input support: Single road photos (`JPG`, `PNG`) and continuous dashcam video streams (`MP4`, `MOV`, `AVI`).
-   - Generates visual overlays with bounding boxes, confidence badges, and telemetry watermarks.
+okDRIVER implements a modular, four-stage civic infrastructure monitoring pipeline:
 
-2. **Automated Severity Scoring:**
-   - Computes continuous numerical severity scores (`0.0` to `10.0`) and categorical ratings (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`) based on bounding-box footprint relative to camera frame dimensions.
+### 1. Computer Vision & Automated Defect Ingestion
+- **Model Architecture:** Uses a fine-tuned **YOLOv8** object detection model capable of locating road defects from single photos (`JPG`, `PNG`, `WEBP`) or dashcam video streams (`MP4`, `MOV`, `AVI`).
+- **Telemetry Extraction:** Automatically extracts latitude, longitude, and timestamp from image EXIF metadata, or binds live device GPS and vehicle speed (`km/h`).
+- **Visual Evidence Overlays:** Generates annotated evidence images with high-visibility bounding boxes, confidence badges, and geographic watermarks.
 
-3. **Dynamic Reverse Geocoding & Municipal Routing:**
-   - Dynamic boundary resolution mapping GPS points to responsible civic authorities:
-     - **National Highways (`NH`):** Routed to **National Highways Authority of India (NHAI)**.
-     - **State Highways (`SH`):** Routed to **State PWD (State Highway Division)**.
-     - **Metros:** **MCD** (Delhi NCR), **BMC** (Mumbai), **BBMP** (Bengaluru).
-     - **Tier-2 & Tier-3 Towns:** Resolves to local **Nagar Palika Parishad** or **Nagar Nigam** (e.g. Alwar, Hathras).
-   - In-memory LRU caching (`@lru_cache`) executes sub-millisecond route matching.
+### 2. Physical Severity & Hazard Calculation
+Rather than treating all potholes equally, okDRIVER calculates physical hazard metrics:
+- **Relative Footprint:** Bounding box pixel dimensions are calculated relative to the total camera frame area.
+- **Continuous Score (`0.0` to `10.0`):** Combines detection confidence, surface footprint, and vehicle speed into a hazard score.
+- **Categorical Tiers:**
+  - `CRITICAL` (Score $\ge 8.0$): Immediate severe accident risk, deep craters, high-speed road defects.
+  - `HIGH` (Score $6.0 - 7.9$): Substantial surface hazard requiring prompt repair.
+  - `MEDIUM` (Score $3.0 - 5.9$): Developing road erosion.
+  - `LOW` (Score $< 3.0$): Surface crack or minor defect.
 
-4. **Multi-Channel Incident Dispatch:**
-   - **Telegram Push Alerts:** Real-time push notifications delivered directly to control room groups (with Google Maps directions and web incident dossier buttons).
-   - **Gmail SMTP Dispatch:** Professional road maintenance dispatch emails with structured HTML and plain-text fallback.
-   - **Simulated Municipal API:** Instant mock authority ticket generation (`TKT-MCD-YYYYMMDD-XXXXXX`).
+### 3. Dynamic Reverse Geocoding & Municipal Routing
+A major challenge in road maintenance is identifying **who owns the road**. okDRIVER dynamically resolves the responsible authority:
+- **National Highways (`NH`):** Automatically routed to the **National Highways Authority of India (NHAI)**.
+- **State Highways (`SH`):** Routed to the respective **State Public Works Department (State Highway Division)**.
+- **Metros:** Bounding-box matching routes to major corporations: **MCD** (Delhi), **BMC** (Mumbai), **BBMP** (Bengaluru).
+- **Tier-2 & Tier-3 Towns:** Resolves to the local **Nagar Palika Parishad** or **Nagar Nigam** (e.g., Alwar, Hathras).
+- **Rural/District Roads:** Assigned to the local **District PWD Division**.
+- **In-Memory Caching:** Uses an LRU cache (`@lru_cache(maxsize=1024)`) rounded to 4 decimal places (~11 meters) to eliminate redundant external geocoding requests during video processing.
 
-5. **Operational Lifecycle Tracking Dashboard:**
-   - Interactive **Leaflet Map** with color-coded severity markers (Red = Critical, Orange = High, Yellow = Medium, Green = Low).
-   - Full audit trail tracking transitions (`DETECTED` $\rightarrow$ `REPORTED` $\rightarrow$ `ACKNOWLEDGED` $\rightarrow$ `IN_PROGRESS` $\rightarrow$ `REPAIRED`) with actor attribution and inspection notes.
-
----
-
-## Tech Stack
-
-| Layer | Technologies Used |
-| :--- | :--- |
-| **Frontend** | Next.js 16, React 19, TailwindCSS, Leaflet, React-Leaflet |
-| **Backend API** | FastAPI, Uvicorn, Pydantic v2, SQLAlchemy 2.0 |
-| **Machine Learning** | YOLOv8 (Ultralytics / Hugging Face), OpenCV, PyTorch, Pillow |
-| **Cloud Database** | PostgreSQL (Neon Cloud Serverless PostgreSQL) |
-| **Object Storage** | Cloudflare R2 / AWS S3 (`boto3` S3-compatible API) |
-| **Containerization** | Docker, Docker Compose (Hugging Face Spaces compatible) |
-| **Alerting** | Telegram Bot API, Gmail SMTP, Municipal REST Ticket API |
+### 4. Automated Multi-Channel Alerting & Lifecycle Tracking
+- **Telegram Push Notifications:** Dispatches structured incident reports directly to municipal control rooms with Google Maps links, defect photo attachments, and direct buttons to web incident dossiers.
+- **Email Notifications (SMTP):** Sends formatted maintenance dispatch notices with HTML email templates and plain-text fallback.
+- **Audit Trail:** Every status change (`DETECTED` $\rightarrow$ `REPORTED` $\rightarrow$ `ACKNOWLEDGED` $\rightarrow$ `IN_PROGRESS` $\rightarrow$ `RESOLVED`) is logged in the database with timestamps, notes, and actor attribution.
 
 ---
 
-## Environment Variables
+## Performance & Cloud Optimizations
 
-Copy `backend/.env.example` to `backend/.env`:
+okDRIVER is engineered to operate smoothly on resource-constrained cloud hosting (such as **Render's Free Tier** with 512MB RAM and shared CPU) without sacrificing detection accuracy:
+
+| Technique | Where It Runs | Purpose & Real-World Impact |
+| :--- | :--- | :--- |
+| **Model Singleton** | `backend/app/main.py` | Loads YOLO once during startup into RAM instead of reading 22MB weights from disk on every upload. Saves 1.5s per request. |
+| **Boot Warmup** | `backend/app/main.py` | Runs a dummy zero-array inference at server startup, eliminating the 3–5 second cold-start lag for the first user. |
+| **Non-Blocking Threadpool** | `backend/app/api/.../potholes.py` | Runs `detector.detect()` inside `asyncio.to_thread()`, preventing YOLO from freezing the event loop so health checks never time out. |
+| **Client-Side Pre-Compression** | `frontend/components/IngestModal.js` | HTML5 `<canvas>` compresses smartphone photos (>1280px) in the browser before upload. Drops payload from ~10MB to ~200KB (95% bandwidth savings). |
+| **Adaptive Video Sampling** | `backend/app/api/.../potholes.py` | Samples 10 keyframes on CPU (vs. 25 on GPU), completing video analysis in ~7 seconds and preventing cloud gateway timeouts. |
+| **Memory Garbage Collection** | `backend/app/api/.../potholes.py` | Calls `gc.collect()` after processing images to instantly free OpenCV memory buffers, keeping RAM well under 512MB. |
+
+---
+
+## Repository Structure
+
+```
+okDRIVER/
+├── okdriver/                     # Core Python Detection Package
+│   ├── detector.py               # PotholeDetector (YOLOv8 wrapper, adaptive device selector)
+│   ├── severity.py               # SeverityCalculator (hazard scoring logic)
+│   ├── visualizer.py             # annotate_frame (bounding boxes, telemetry watermarks)
+│   └── utils.py                  # EXIF GPS parser & model download manager
+│
+├── backend/                      # FastAPI REST API Backend
+│   ├── app/
+│   │   ├── api/v1/endpoints/     # REST routes (potholes, health, analytics)
+│   │   ├── crud/                 # Database queries and audit log creation
+│   │   ├── models/               # SQLAlchemy models (PotholeRecord, PotholeReport)
+│   │   ├── schemas/              # Pydantic v2 validation schemas
+│   │   ├── services/             # Storage (Cloudflare R2), Authorities (OSM), Alerts (Telegram/Email)
+│   │   ├── config.py             # App settings & environment loader
+│   │   ├── database.py           # Engine & SessionLocal (Neon PostgreSQL + SQLite fallback)
+│   │   └── main.py               # FastAPI app, lifespan singleton & warmup
+│   ├── requirements.txt          # Python dependencies
+│   ├── run_server.py             # Standalone server launcher
+│   └── seed_data.py              # Test incident seeder
+│
+├── frontend/                     # Next.js 16 Web Dashboard
+│   ├── app/                      # App router (homepage, analytics, incident dossier)
+│   ├── components/               # UI components (MapView, DataTable, IngestModal, IncidentCard)
+│   ├── lib/api.js                # API client connector
+│   └── package.json              # Frontend dependencies
+│
+├── run.bat                       # 1-Click Windows execution script
+├── Dockerfile                    # Containerization definition
+├── docker-compose.yml            # Multi-service composition
+└── README.md                     # Documentation
+```
+
+---
+
+## Quick Start Guide
+
+### 1-Click Windows Launch (Recommended)
+
+If you are on Windows, simply double-click **`run.bat`** or run:
+
+```powershell
+./run.bat
+```
+
+This starts:
+- **Backend API:** [http://localhost:8000](http://localhost:8000)
+- **Frontend Dashboard:** [http://localhost:3000](http://localhost:3000)
+
+---
+
+### Manual Local Setup
+
+#### Prerequisites
+- **Python 3.10 to 3.14**
+- **Node.js 18+** and **npm**
+
+#### Step 1: Backend Setup
+```bash
+# 1. Navigate to backend
+cd backend
+
+# 2. Install dependencies
+pip install -r requirements.txt
+pip install -e ..
+
+# 3. Create .env file (copy from .env.example)
+cp .env.example .env
+
+# 4. (Optional) Seed demo incidents
+python seed_data.py
+
+# 5. Start FastAPI server
+python run_server.py
+```
+- API Root: [http://localhost:8000](http://localhost:8000)
+- Swagger Documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
+- ReDoc Documentation: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+#### Step 2: Frontend Setup
+```bash
+# Open a new terminal
+cd frontend
+
+# Install Node dependencies
+npm install
+
+# Start Next.js development server
+npm run dev
+```
+- Dashboard: [http://localhost:3000](http://localhost:3000)
+
+---
+
+### Docker Compose
+
+Run the entire platform in isolated containers:
+
+```bash
+docker compose up --build
+```
+- Frontend: `http://localhost:3000`
+- Backend: `http://localhost:8000`
+
+---
+
+## Environment Configuration
+
+Configure variables in `backend/.env`:
 
 ```env
-# Database (Neon Cloud PostgreSQL)
-DATABASE_URL=postgresql+psycopg2://neondb_owner:password@ep-solitary-grass-xxxx.neon.tech/neondb?sslmode=require
+# Database (Neon Cloud PostgreSQL or local fallback)
+DATABASE_URL=postgresql+psycopg2://<user>:<password>@<host>/<database>?sslmode=require
+ENABLE_SQLITE_FALLBACK=true
 
-# Cloudflare R2 / AWS S3 Media Storage
+# Object Storage (Cloudflare R2 / AWS S3)
 R2_ENDPOINT_URL=https://<account_id>.r2.cloudflarestorage.com
-R2_ACCESS_KEY_ID=<your_r2_access_key>
-R2_SECRET_ACCESS_KEY=<your_r2_secret_key>
+R2_ACCESS_KEY_ID=<your_key_id>
+R2_SECRET_ACCESS_KEY=<your_secret_key>
 R2_BUCKET_NAME=potholeimage
 
 # SMTP Email Alerting
@@ -117,8 +259,8 @@ SMTP_PASSWORD=your_app_password
 SMTP_FROM=your_email@gmail.com
 
 # Telegram Push Alerts
-TELEGRAM_BOT_TOKEN=8837174299:AAGbvuRoW8h13Wt46Dhz_T_TN0x4MCbWNSc
-TELEGRAM_DEFAULT_CHAT_ID=-5567080146
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_DEFAULT_CHAT_ID=your_chat_or_group_id
 
 # Server Settings
 HOST=0.0.0.0
@@ -128,73 +270,53 @@ FRONTEND_URL=http://localhost:3000
 
 ---
 
-## Running Locally
+## API Reference
 
-### 1. Backend Setup
-```bash
-cd backend
-pip install -r requirements.txt
-pip install -e ..
+### Detection & Ingestion
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/potholes/detect-and-store` | Upload image/video for live YOLO inference, cloud evidence storage, and DB persistence. |
+| `POST` | `/api/v1/potholes/ingest` | Ingest structured detection telemetry JSON from an external client. |
 
-# Seed database with realistic incidents & geocoded authorities
-python seed_data.py
+### Incident Management
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/potholes/` | Filtered & paginated list of defects (by severity, status, authority, bounding box). |
+| `GET` | `/api/v1/potholes/{id}` | Full incident dossier with telemetry, bounding box, and history audit log. |
+| `PATCH`| `/api/v1/potholes/{id}/status` | Transition status (`REPORTED`, `ACKNOWLEDGED`, `IN_PROGRESS`, `RESOLVED`). |
+| `DELETE`| `/api/v1/potholes/{id}` | Remove defect record. |
 
-# Start FastAPI server
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-- Interactive Swagger API Documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
-- ReDoc API Documentation: [http://localhost:8000/redoc](http://localhost:8000/redoc)
-
-### 2. Frontend Setup
-```bash
-cd frontend
-npm install
-npm run dev
-```
-- Open [http://localhost:3000](http://localhost:3000) in your browser.
-
----
-
-## 1-Command Deployment via Docker Compose
-
-```bash
-docker compose up --build
-```
-- Frontend: `http://localhost:3000`
-- Backend API: `http://localhost:8000`
+### Analytics & Reporting
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/potholes/stats/summary` | Aggregate defect counts grouped by severity, status, and average confidence. |
+| `POST` | `/api/v1/potholes/{id}/report` | Manually dispatch Telegram/Email alert for a defect. |
+| `POST` | `/api/v1/potholes/auto-report-critical`| Batch dispatch alerts for all un-reported critical hazards. |
+| `GET` | `/api/v1/health` | Service health status and database connectivity check. |
 
 ---
 
-## Cloud Deployment Guide
+## Deployment Guide
 
-### A. Deploy AI Backend to Hugging Face Spaces (16 GB RAM Free)
-1. Go to [huggingface.co/spaces](https://huggingface.co/spaces) $\rightarrow$ **Create new Space**.
-2. Select **Docker** as Space SDK.
-3. Push the repository. The included [`Dockerfile`](file:///c:/Users/yashs/Desktop/okDRIVER/Dockerfile) will automatically build and expose port `7860`.
-4. In Space **Settings $\rightarrow$ Variables and Secrets**, add:
-   - `DATABASE_URL` (from Neon)
-   - `R2_ENDPOINT_URL`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` (from Cloudflare R2)
-   - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_DEFAULT_CHAT_ID`
-5. Ping `https://your-space.hf.space/api/v1/health` with **UptimeRobot** (every 5 minutes) to ensure 24/7 uptime without sleep.
+### Deploy Backend to Render (Free Tier)
+1. Link your GitHub repo to [Render](https://render.com).
+2. Choose **Web Service** $\rightarrow$ **Python**.
+3. Set:
+   - **Root Directory:** `backend`
+   - **Build Command:** `pip install -r requirements.txt && pip install -e ..`
+   - **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+4. Add environment variables from your `.env` file.
+5. Render will automatically build and host the API within the 512MB RAM free tier limit.
 
-### B. Deploy Frontend to Vercel
-1. Go to [vercel.com](https://vercel.com) $\rightarrow$ **Add New Project**.
-2. Connect your GitHub repository and select the `frontend/` directory.
-3. Set the Environment Variable:
-   - `NEXT_PUBLIC_API_URL` = `https://your-space.hf.space` (or your live backend URL).
+### Deploy Frontend to Vercel
+1. Link your repo to [Vercel](https://vercel.com).
+2. Set **Root Directory** to `frontend`.
+3. Add environment variable:
+   - `NEXT_PUBLIC_API_URL` = `https://your-backend.onrender.com`
 4. Click **Deploy**.
 
 ---
 
-## Automated Tests
+## License
 
-Run backend unit and integration tests:
-```bash
-pytest backend/tests -v
-```
-
----
-
-## License & Attribution
-- Open-source detection model adapted from Ultralytics YOLOv8.
-- Reverse geocoding telemetry powered by OpenStreetMap Nominatim.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.

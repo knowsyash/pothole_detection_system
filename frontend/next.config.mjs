@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const backendBase = process.env.NEXT_PUBLIC_API_URL 
   ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '')
-  : 'http://localhost:8000';
+  : 'https://pothole-detection-system-mseo.onrender.com';
 
 const nextConfig = {
   typescript: {

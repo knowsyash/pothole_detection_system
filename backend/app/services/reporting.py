@@ -7,6 +7,9 @@ from app.models.pothole import PotholeRecord, ReportChannel, ReportStatus
 from app.services.authorities import CivicAuthority, resolve_authority, get_authority_by_code
 
 
+from app.services.storage import storage_service
+
+
 def generate_ticket_id(authority_code: str) -> str:
     """Generate a clean, human-readable municipal ticket ID."""
     date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
@@ -25,6 +28,11 @@ def generate_pothole_report(
 
     ticket_id = pothole.ticket_id or generate_ticket_id(authority.code)
     maps_url = f"https://www.google.com/maps?q={pothole.latitude},{pothole.longitude}"
+
+    # Resolve direct Cloudflare R2 URLs for high-res viewing
+    annotated_url = storage_service.ensure_r2_url(pothole.annotated_evidence_url)
+    raw_url = storage_service.ensure_r2_url(pothole.image_evidence_url)
+    primary_photo_url = annotated_url or raw_url or pothole.annotated_evidence_url or pothole.image_evidence_url
 
     # Format ISO timestamp
     ts_str = pothole.timestamp.isoformat() if hasattr(pothole.timestamp, "isoformat") else str(pothole.timestamp)
@@ -60,10 +68,10 @@ Altitude:             {pothole.altitude or 'N/A'} m
 Vehicle Speed:        {pothole.speed_kmh or 'N/A'} km/h
 Google Maps Link:     {maps_url}
 
-IMAGE EVIDENCE:
----------------
-Annotated Overlay:    {pothole.annotated_evidence_url or 'N/A'}
-Raw Image Evidence:   {pothole.image_evidence_url or 'N/A'}
+IMAGE EVIDENCE (CLOUDFLARE R2):
+-------------------------------
+Annotated Hazard Photo: {annotated_url or pothole.annotated_evidence_url or 'N/A'}
+Raw Camera Photo:       {raw_url or pothole.image_evidence_url or 'N/A'}
 
 ADDITIONAL NOTES:
 -----------------
@@ -80,6 +88,26 @@ Generated automatically by okDRIVER Telemetry & Pothole Detection Suite.
         "MEDIUM": "#ca8a04",
         "LOW": "#16a34a",
     }.get(pothole.severity, "#4b5563")
+
+    # Build image preview and photo button components
+    image_preview_html = ""
+    if primary_photo_url:
+        image_preview_html = f"""
+        <div style="margin: 16px 0; background: #0f172a; border-radius: 8px; overflow: hidden; border: 1px solid #334155; text-align: center;">
+          <a href="{primary_photo_url}" target="_blank" style="display: block; text-decoration: none;">
+            <img src="{primary_photo_url}" alt="Hazard Evidence Overlay" style="max-width: 100%; height: auto; display: block; margin: 0 auto; object-fit: contain;" />
+          </a>
+          <div style="padding: 10px; background: #1e293b; color: #94a3b8; font-size: 12px; font-weight: 500;">
+            📸 <strong>Cloudflare R2 Direct Evidence Photo</strong> &bull; Tap photo or button below to inspect in high resolution
+          </div>
+        </div>
+        """
+
+    buttons_html = ""
+    if annotated_url:
+        buttons_html += f"""<a href="{annotated_url}" target="_blank" style="display: inline-block; background: #0284c7; color: #ffffff; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 13px; margin-right: 8px; margin-bottom: 8px;">🔍 Open Annotated Photo (Cloudflare R2)</a>"""
+    if raw_url:
+        buttons_html += f"""<a href="{raw_url}" target="_blank" style="display: inline-block; background: #475569; color: #ffffff; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 13px; margin-bottom: 8px;">📷 Open Raw Camera Photo</a>"""
 
     html_body = f"""<!DOCTYPE html>
 <html>
@@ -118,10 +146,16 @@ Generated automatically by okDRIVER Telemetry & Pothole Detection Suite.
         <p><a href="{maps_url}" target="_blank" class="button">View on Google Maps</a></p>
       </div>
       <div class="section">
-        <h3>Evidence &amp; Inspection</h3>
-        <div><span class="field-label">Annotated Frame:</span> {pothole.annotated_evidence_url or 'None'}</div>
-        <div><span class="field-label">Raw Photo:</span> {pothole.image_evidence_url or 'None'}</div>
-        <p style="color: #6b7280; font-style: italic;">{custom_notes or pothole.notes or 'Recorded automatically by okDRIVER fleet vehicle sensor.'}</p>
+        <h3>Evidence &amp; Inspection (Cloudflare R2)</h3>
+        {image_preview_html}
+        <div style="margin: 12px 0;">
+          {buttons_html}
+        </div>
+        <div style="font-size: 13px; margin-top: 8px; word-break: break-all;">
+          <div><span class="field-label">Annotated URL:</span> <a href="{annotated_url or pothole.annotated_evidence_url}" target="_blank" style="color: #0284c7;">{annotated_url or pothole.annotated_evidence_url or 'None'}</a></div>
+          <div><span class="field-label">Raw Photo URL:</span> <a href="{raw_url or pothole.image_evidence_url}" target="_blank" style="color: #0284c7;">{raw_url or pothole.image_evidence_url or 'None'}</a></div>
+        </div>
+        <p style="color: #6b7280; font-style: italic; margin-top: 14px;">{custom_notes or pothole.notes or 'Recorded automatically by okDRIVER fleet vehicle sensor.'}</p>
       </div>
     </div>
     <div class="footer">
@@ -159,8 +193,8 @@ Generated automatically by okDRIVER Telemetry & Pothole Detection Suite.
             "bounding_box": pothole.bounding_box,
         },
         "evidence": {
-            "image_evidence_url": pothole.image_evidence_url,
-            "annotated_evidence_url": pothole.annotated_evidence_url,
+            "image_evidence_url": raw_url or pothole.image_evidence_url,
+            "annotated_evidence_url": annotated_url or pothole.annotated_evidence_url,
         },
         "email_payload": {
             "subject": subject,

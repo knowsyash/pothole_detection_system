@@ -186,14 +186,21 @@ class TelegramService:
         )
 
         # Inline Action Buttons
-        reply_markup = {
-            "inline_keyboard": [
-                [
-                    {"text": "🗺️ Open in Google Maps", "url": maps_url},
-                    {"text": "🌐 View Incident Dossier", "url": dossier_url},
-                ]
+        evidence = report_data.get("evidence", {})
+        photo_url = evidence.get("annotated_evidence_url") or evidence.get("image_evidence_url")
+
+        keyboard_rows = [
+            [
+                {"text": "🗺️ Open in Google Maps", "url": maps_url},
+                {"text": "🌐 View Incident Dossier", "url": dossier_url},
             ]
-        }
+        ]
+        if photo_url and (photo_url.startswith("http://") or photo_url.startswith("https://")):
+            keyboard_rows.append([
+                {"text": "📸 View Defect Photo (Cloudflare R2)", "url": photo_url}
+            ])
+
+        reply_markup = {"inline_keyboard": keyboard_rows}
 
         return self.send_message(
             text=caption,

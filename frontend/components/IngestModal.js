@@ -44,6 +44,8 @@ export default function IngestModal({ isOpen, onClose, onSuccess }) {
   const [result, setResult] = useState(null);
   const [reportSent, setReportSent] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
+  const [telegramSent, setTelegramSent] = useState(false);
+  const [telegramLoading, setTelegramLoading] = useState(false);
   const fileInputRef = useRef(null);
   const dragRef = useRef(null);
 
@@ -66,6 +68,7 @@ export default function IngestModal({ isOpen, onClose, onSuccess }) {
     setError(null);
     setResult(null);
     setReportSent(false);
+    setTelegramSent(false);
   };
 
   const handleFileChange = (e) => handleFileSelect(e.target.files[0]);
@@ -95,7 +98,7 @@ export default function IngestModal({ isOpen, onClose, onSuccess }) {
       (pos) => {
         setLatitude(pos.coords.latitude.toFixed(6));
         setLongitude(pos.coords.longitude.toFixed(6));
-        if (pos.coords.speed != null) {
+        if (pos.coords.speed !== null && !isNaN(pos.coords.speed)) {
           setSpeedKmh((pos.coords.speed * 3.6).toFixed(1));
         }
         setGpsLoading(false);
@@ -136,7 +139,7 @@ export default function IngestModal({ isOpen, onClose, onSuccess }) {
       const res = await detectAndStore(formData);
       setResult(res);
     } catch (err) {
-      setError(`Detection failed: ${err.message || "Ensure FastAPI backend is running on :8000"}`);
+      setError(`Detection failed: ${err.message || "Ensure FastAPI backend is running"}`);
     } finally {
       setLoading(false);
     }
@@ -146,21 +149,53 @@ export default function IngestModal({ isOpen, onClose, onSuccess }) {
     if (!result?.records?.length) return;
     setReportLoading(true);
     try {
-      const potholeId = result.records[0].id;
-      const resp = await fetch(
-        `${API_BASE}/potholes/${potholeId}/report`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ channel: "EMAIL" }),
-        }
+      // Sort so critical / highest hazard defects are prioritized first
+      const sorted = [...result.records].sort(
+        (a, b) => (b.severity_score || 0) - (a.severity_score || 0)
       );
-      if (!resp.ok) throw new Error(await resp.text());
+      for (const rec of sorted) {
+        const resp = await fetch(
+          `${API_BASE}/potholes/${rec.id}/report`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ channel: "EMAIL" }),
+          }
+        );
+        if (!resp.ok) console.warn(`Failed to dispatch email for #${rec.id}:`, await resp.text());
+      }
       setReportSent(true);
     } catch (err) {
       setError(`Report dispatch failed: ${err.message}`);
     } finally {
       setReportLoading(false);
+    }
+  };
+
+  const handleSendTelegramAlert = async () => {
+    if (!result?.records?.length) return;
+    setTelegramLoading(true);
+    try {
+      // Sort so critical / highest hazard defects are prioritized first
+      const sorted = [...result.records].sort(
+        (a, b) => (b.severity_score || 0) - (a.severity_score || 0)
+      );
+      for (const rec of sorted) {
+        const resp = await fetch(
+          `${API_BASE}/potholes/${rec.id}/report`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ channel: "TELEGRAM" }),
+          }
+        );
+        if (!resp.ok) console.warn(`Failed to dispatch telegram for #${rec.id}:`, await resp.text());
+      }
+      setTelegramSent(true);
+    } catch (err) {
+      setError(`Telegram alert failed: ${err.message}`);
+    } finally {
+      setTelegramLoading(false);
     }
   };
 
@@ -170,6 +205,7 @@ export default function IngestModal({ isOpen, onClose, onSuccess }) {
     setPreview(null);
     setResult(null);
     setReportSent(false);
+    setTelegramSent(false);
     setError(null);
     onClose();
   };
@@ -288,6 +324,7 @@ export default function IngestModal({ isOpen, onClose, onSuccess }) {
               </div>
             ))}
 
+            {/* Email Dispatch Button */}
             {result.potholes_recorded > 0 && !reportSent && (
               <button
                 onClick={handleSendEmailReport}
@@ -311,7 +348,39 @@ export default function IngestModal({ isOpen, onClose, onSuccess }) {
                 }}
               >
                 <span>{reportLoading ? "⏳" : "📧"}</span>
-                {reportLoading ? "Dispatching Email Report..." : `Send Email Report to ${topSeverity?.authority_code || "Authority"}`}
+                {reportLoading
+                  ? `Dispatching Email Report for ${result.records.length} Defect${result.records.length > 1 ? 's' : ''}...`
+                  : `Send Email Report for all ${result.records.length} defect${result.records.length > 1 ? 's' : ''} (Highest: ${topSeverity?.severity || "URGENT"})`}
+              </button>
+            )}
+
+            {/* Telegram Dispatch Button */}
+            {result.potholes_recorded > 0 && !telegramSent && (
+              <button
+                onClick={handleSendTelegramAlert}
+                disabled={telegramLoading}
+                style={{
+                  marginTop: "6px",
+                  width: "100%",
+                  padding: "10px",
+                  background: telegramLoading ? "#064e3b" : "linear-gradient(90deg,#059669,#0d9488)",
+                  border: "none",
+                  borderRadius: "8px",
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: "12px",
+                  cursor: telegramLoading ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  transition: "opacity 0.2s",
+                }}
+              >
+                <span>{telegramLoading ? "⏳" : "✈️"}</span>
+                {telegramLoading
+                  ? `Dispatching Telegram Alert for ${result.records.length} Defect${result.records.length > 1 ? 's' : ''}...`
+                  : `Dispatch Telegram Alert to Group (${result.records.length} Defect${result.records.length > 1 ? 's' : ''})`}
               </button>
             )}
 
@@ -329,7 +398,25 @@ export default function IngestModal({ isOpen, onClose, onSuccess }) {
                 gap: "8px",
               }}>
                 <span>✉️</span>
-                Email report dispatched via Gmail to civic authority!
+                Email reports dispatched for all {result.records.length} defect(s) to civic authorities!
+              </div>
+            )}
+
+            {telegramSent && (
+              <div style={{
+                marginTop: "6px",
+                padding: "10px 12px",
+                background: "rgba(16,185,129,0.12)",
+                border: "1px solid rgba(16,185,129,0.3)",
+                borderRadius: "8px",
+                fontSize: "12px",
+                color: "#6ee7b7",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+              }}>
+                <span>✈️</span>
+                Telegram push alerts dispatched to live monitoring channel!
               </div>
             )}
 

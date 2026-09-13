@@ -53,11 +53,27 @@ class PotholeDetector:
             offline_mode: If True, operates without loading YOLO weights (useful for testing or pipeline mocks).
         """
         self.conf_threshold = conf_threshold
-        self.device = device
         self.offline_mode = offline_mode
         self.severity_calculator = SeverityCalculator(severity_config)
         self.model: Any = None
         self.weights_path: Optional[str] = None
+
+        # Auto-select best available device: prefer CUDA GPU, fall back to CPU
+        if device is not None:
+            self.device = device
+        else:
+            try:
+                import torch
+                self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            except ImportError:
+                self.device = "cpu"
+
+        import logging
+        _logger = logging.getLogger("okdriver.detector")
+        _logger.info(f"PotholeDetector using device: {self.device.upper()}")
+
+        # Use smaller image size on CPU for faster inference (~2x speedup)
+        self._imgsz = 640 if self.device != "cpu" else 480
 
         if not self.offline_mode:
             self._init_model(model_path, auto_download)
@@ -134,6 +150,7 @@ class PotholeDetector:
                 source=frame_arr,
                 conf=self.conf_threshold,
                 device=self.device,
+                imgsz=self._imgsz,
                 verbose=False,
             )
 

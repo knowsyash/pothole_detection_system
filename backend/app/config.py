@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://127.0.0.1:3000"
 
     # ── Cloudflare R2 / AWS S3 Object Storage ────────────────────────────────
+    ENABLE_R2_STORAGE: bool = True  # Enable Cloudflare R2 remote storage
     R2_ENDPOINT_URL: Optional[str] = None
     R2_ACCESS_KEY_ID: Optional[str] = None
     R2_SECRET_ACCESS_KEY: Optional[str] = None
